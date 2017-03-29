@@ -13,7 +13,7 @@
   File SDfile;// used for storing the file object
   char buffer[36];
   unsigned int count = 0;   //used to keep count of how many interrupts were fired
-  uint32_t totalCount = 0;   //used to keep count of how many interrupts were fired
+  volatile uint32_t totalCount = 0;   //used to keep count of how many interrupts were fired
 
 void setup()
 {
