@@ -11,26 +11,20 @@
  */
   int ChipSelect = 10;//Chip Select
   File SDfile;// used for storing the file object
-  volatile int writeToSD =1;
-  float number1 = 111.123;
-  double number2 = 222.213;
-  double number3 = 360.321;
   char buffer[36];
-  int timer1_counter;
-//unsigned int toggle = 0;  //used to keep the state of the LED
-unsigned int count = 0;   //used to keep count of how many interrupts were fired
-unsigned int totalCount = 0;   //used to keep count of how many interrupts were fired
+  unsigned int count = 0;   //used to keep count of how many interrupts were fired
+  uint32_t totalCount = 0;   //used to keep count of how many interrupts were fired
 
 void setup()
 {
   Serial.begin(9600);
   startSDCard();
   createFile("OutFile.txt");
-  writeToFile("*********TimerStuff*********test123");
+  writeToFile("test123");
   closeFile();
 
   TCCR2B = 0x00;        //Disbale Timer2 while we set it up
-  TCNT2  = 5;         //Reset Timer Count to 130 out of 255(1 ms)
+  TCNT2  = 130;         //Reset Timer Count to 130 out of 255(1 ms)
   TIFR2  = 0x00;        //Timer2 INT Flag Reg: Clear Timer Overflow Flag
   TIMSK2 = 0x01;        //Timer2 INT Reg: Timer2 Overflow Interrupt Enable
   TCCR2A = 0x00;        //Timer2 Control Reg A: Wave Gen Mode normal
@@ -40,70 +34,30 @@ void setup()
 //Timer2 Overflow Interrupt Vector, called every 1ms
 ISR(TIMER2_OVF_vect)        // interrupt service routine 
 { 
-  totalCount++;
-  count++;               //Increments the interrupt counter
-  if(count > 10){//10ms
-    writeToSD = 1;  
-    count = 0;           //Resets the interrupt counter
-  }
-//
-//   if(writeToSD == 1)
-//   {
-//      //startSDCard();
-//      createFile("OutFile.txt");
-//      writeNumbersToFile(buffer, number1, number2, number3);  
-//      closeFile();
-//      writeToSD = 0;
-//   }
-  
-  TCNT2 = 5;           //Reset Timer to 130 out of 255
+  TCNT2 = 130;           //Reset Timer to 130 out of 255
   TIFR2 = 0x00;          //Timer2 INT Flag Reg: Clear Timer Overflow Flag
+  totalCount++;  
 };
 
 void loop()
 {
-  
-      startSDCard();
-  int array[10];
-  int value =0;
-  while(true){
-
-
-//      createFile("OutFile.txt");
-//    for(int i=0; i<10; i++)
-//    {
-//      int startTime = totalCount;
-//      createFile("OutFile.txt");
-//      writeNumbersToFile(buffer, number1, number2, number3);  
-//      closeFile();
-//      int endTime = totalCount;
-//      array[i] = endTime-startTime;
-//      
-//    }
-
-    int aStart = totalCount;
+    startSDCard();
+    uint32_t value =0;
+        
+    uint32_t aStart = totalCount;
     delay(500);
-    int aEnd = totalCount;
+    uint32_t aEnd = totalCount;
     value = aEnd-aStart;
-
-      createFile("OutFile.txt");
-      sprintf(buffer, "difference: %i", value);
-      writeToFile(buffer);  
-      closeFile();
-//    for(int i =0; i < 12; i++)
-//    {
-//      //startSDCard();
-//      createFile("OutFile.txt");
-//      sprintf(buffer, "difference: %i", array[i]);
-//      writeToFile(buffer);  
-//      closeFile();
-//    }
+    
+    createFile("OutFile.txt");
+    sprintf(buffer, "difference: %i", value);
+    writeToFile(buffer);  
+    closeFile();
     while(true)
     {
       
-    }
-      
-  }
+    }      
+
 }
  
 
