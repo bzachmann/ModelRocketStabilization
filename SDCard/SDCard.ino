@@ -30,7 +30,7 @@ void setup()
   closeFile();
 
   TCCR2B = 0x00;        //Disbale Timer2 while we set it up
-  TCNT2  = 5;         //Reset Timer Count to 130 out of 255(1 ms)
+  TCNT2  = 130;         //Reset Timer Count to 130 out of 255(1 ms)
   TIFR2  = 0x00;        //Timer2 INT Flag Reg: Clear Timer Overflow Flag
   TIMSK2 = 0x01;        //Timer2 INT Reg: Timer2 Overflow Interrupt Enable
   TCCR2A = 0x00;        //Timer2 Control Reg A: Wave Gen Mode normal
@@ -56,7 +56,7 @@ ISR(TIMER2_OVF_vect)        // interrupt service routine
 //      writeToSD = 0;
 //   }
   
-  TCNT2 = 5;           //Reset Timer to 130 out of 255
+  TCNT2 = 130;           //Reset Timer to 130 out of 255
   TIFR2 = 0x00;          //Timer2 INT Flag Reg: Clear Timer Overflow Flag
 };
 

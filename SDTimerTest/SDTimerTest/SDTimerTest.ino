@@ -17,12 +17,6 @@
 
 void setup()
 {
-  Serial.begin(9600);
-  startSDCard();
-  createFile("OutFile.txt");
-  writeToFile("test123");
-  closeFile();
-
   TCCR2B = 0x00;        //Disbale Timer2 while we set it up
   TCNT2  = 130;         //Reset Timer Count to 130 out of 255(1 ms)
   TIFR2  = 0x00;        //Timer2 INT Flag Reg: Clear Timer Overflow Flag
@@ -35,13 +29,12 @@ void setup()
 ISR(TIMER2_OVF_vect)        // interrupt service routine 
 { 
   TCNT2 = 130;           //Reset Timer to 130 out of 255
-  TIFR2 = 0x00;          //Timer2 INT Flag Reg: Clear Timer Overflow Flag
   totalCount++;  
+  TIFR2 = 0x00;          //Timer2 INT Flag Reg: Clear Timer Overflow Flag
 };
 
 void loop()
 {
-    startSDCard();
     uint32_t value =0;
         
     uint32_t aStart = totalCount;
@@ -49,8 +42,14 @@ void loop()
     uint32_t aEnd = totalCount;
     value = aEnd-aStart;
     
+    Serial.begin(9600);
+    startSDCard();
     createFile("OutFile.txt");
-    sprintf(buffer, "difference: %i", value);
+    writeToFile("test123");
+    closeFile();
+    startSDCard();
+    createFile("OutFile.txt");
+    sprintf(buffer, "difference: %u", value);
     writeToFile(buffer);  
     closeFile();
     while(true)
