@@ -12,8 +12,12 @@
   int ChipSelect = 10;//Chip Select
   File SDfile;// used for storing the file object
   char buffer[36];
-  unsigned int count = 0;   //used to keep count of how many interrupts were fired
   volatile uint32_t totalCount = 0;   //used to keep count of how many interrupts were fired
+  volatile uint32_t count = 0;   //used to keep count of how many interrupts were fired
+  volatile uint32_t sdWrite = 0;   //used to keep count of how many interrupts were fired
+  float number1 = 111.123;
+  double number2 = 222.213;
+  double number3 = 360.321;
 
 void setup()
 {
@@ -29,32 +33,46 @@ void setup()
 ISR(TIMER2_OVF_vect)        // interrupt service routine 
 { 
   TCNT2 = 130;           //Reset Timer to 130 out of 255
-  totalCount++;  
+  totalCount++;    
   TIFR2 = 0x00;          //Timer2 INT Flag Reg: Clear Timer Overflow Flag
 };
 
 void loop()
 {
     uint32_t value =0;
-        
-    uint32_t aStart = totalCount;
-    delay(500);
-    uint32_t aEnd = totalCount;
-    value = aEnd-aStart;
-    
+    uint32_t data[10];
     Serial.begin(9600);
     startSDCard();
     createFile("OutFile.txt");
-    writeToFile("test123");
+    writeToFile("test123!!");
+    //closeFile();
+        
+//    uint32_t aStart = totalCount;
+//    delay(2000);
+//    uint32_t aEnd = totalCount;
+//    value = aEnd-aStart;
+
+    for(int i =0; i < 10; i++)
+    {      
+      uint32_t aStart = totalCount;
+      //createFile("OutFile.txt");
+      writeNumbersToFile(buffer, number1, number2, number3); 
+      //closeFile();
+      uint32_t aEnd = totalCount;
+      data[i] = aEnd-aStart;
+    }
     closeFile();
-    startSDCard();
-    createFile("OutFile.txt");
-    sprintf(buffer, "difference: %u", value);
-    writeToFile(buffer);  
-    closeFile();
+
+    for(int i =0; i < 10; i++)
+    {      
+      createFile("OutFile.txt");
+      sprintf(buffer, "difference: %u", data[i]);
+      writeToFile(buffer);  
+      closeFile();
+    }      
     while(true)
     {
-      
+      //do nothing
     }      
 
 }
