@@ -7,9 +7,16 @@ class BetterServo: public Servo
 {
 public:
   BetterServo();
-  
-	void test();
-  
+
+	uint8_t attach(int pin, double min, double max, double offset);
+  uint8_t attach(int pin);
+
+  uint8_t write(double value);
+
+private:
+  double minD;
+  double maxD;
+  double m_offset;
 };
 
 #endif /* BETTERSERVO_H_ */
