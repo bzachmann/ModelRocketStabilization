@@ -34,7 +34,7 @@ uint8_t BetterServo::write(double value)
   }
 
   long r_value_scaled = r_value * 100; 
-  int us_value = map(r_value_scaled, 0, 18000, 0, 2400);
+  int us_value = map(r_value_scaled, 0, 18000, 544, 2400);
 
   Servo::writeMicroseconds(us_value);
   
