@@ -24,9 +24,11 @@
 ///////////////variables///////////////////
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 BetterServo servo[4];
+sensors_event_t event;
 double zeroPoint[2] = {0.0, 0.0};
-
+double deviation[2] = {0.0, 0.0};
 uint32_t buttonCount = 0;
+bool zeroPointSetFlag = false;
 
 ///////////////prototypes//////////////////
 void setupServos();
@@ -50,31 +52,26 @@ void setup() {
 
 void loop()
 {
+  bno.getEvent(&event);
+  deviation[0] = event.orientation.y - zeroPoint[0];
+  deviation[1] = event.orientation.z - zeroPoint[1];
+  setServosTilt(deviation[0], deviation[1]);
+  
+
   if(digitalRead(PIN_BUTTON))
   {
     buttonCount++;
-    if(buttonCount = 300); //3 sec b/c of 10ms delay at end of loop.. change this when timer interrupt implemented
+    if(buttonCount == 150) //3 sec b/c of 10ms delay at end of loop.. change this when timer interrupt implemented
     {
       setZeroPoint();
+      buttonCount = 0;
     }
   }
   else
   {
     buttonCount = 0;
   }
-
-//  servo.write(val);
-//
-//  if(digitalRead(PIN_BUTTON))
-//  {
-//    delay(100);
-//    val -= 0.5;
-//    while(digitalRead(PIN_BUTTON)){}
-//  }
-
-  sensors_event_t event; 
-  bno.getEvent(&event);
-  setServosTilt(event.orientation.y, event.orientation.z);
+  
   delay(10);
 
 }
@@ -108,7 +105,8 @@ void setServosTilt(double y, double z)
 
 void setZeroPoint()
 {
-  return;
+  zeroPoint[0] = event.orientation.y;
+  zeroPoint[1] = event.orientation.z;
 }
 
 
