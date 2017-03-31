@@ -3,7 +3,8 @@
  * 
  * 1. check hall effect sensor, and if not present trigger shutdown
  * 2. figure out way to cancel rocket spin using angular velocity about the x axis
- * 3. figure out shaking issue that is caused if removing the delay() in the main loop
+ * 3. figure out shaking issue that is caused by imu i2c line inducing noise on PWM signals
+ * 4. add sd card writing into code
  */
 
 #include <Arduino.h>
@@ -30,6 +31,9 @@
 #define MIN_FIN_LIMIT     -50
 #define MAX_FIN_LIMIT      50
 
+#define MS_UPDATE_SERVO_RATE  1 //bringing this value close to 1 might cause PWM signal problems
+                                //this refresh rate need not be any faster than the polling of imu data
+
 ///////////////variables///////////////////
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 BetterServo servo[4];
@@ -38,6 +42,8 @@ double zeroPoint[2] = {0.0, 0.0};
 volatile double deviation[2] = {0.0, 0.0};
 volatile uint32_t buttonCount = 0;
 volatile bool setZeroPointFlag = false;
+//volatile uint8_t setServosCount = 0;
+//volatile bool setServosFlag = false;
 
 volatile SDQueue SDLog = SDQueue();
 volatile uint8_t timeToQueueCounter = 0;
@@ -50,6 +56,8 @@ void setupTimer2();
 void checkButton();
 void checkSetZeroPoint();
 void checkWriteSD();
+//void checkTimeToFlagServos();
+//void checkSetServos();
 
 
 //////////////program///////////////////
@@ -57,31 +65,45 @@ void setup() {
   //TODO REMOVE THIS LINE WHEN SETTING UP SD CARD
   pinMode(13, OUTPUT);
   
-  setupTimer2();
-  setupServos();
-
   if(!bno.begin())
   {
     while(1);
   }
-  delay(200);
+  delay(1000);
   bno.setExtCrystalUse(true);
+
+  setupTimer2();
+  setupServos();
 }
 
 void loop()
 {
-  bno.getEvent(&event);
+  bno.getEvent(&event);// this causes servo jitter...might be caused by noise induced in pmw line when i2c bus active
+                         //this could be fixed by a filter on the hardware line.  as a software fix we 
+                         // just might need to limit how often we use the i2c line
   deviation[0] = event.orientation.y - zeroPoint[0];
   deviation[1] = event.orientation.z - zeroPoint[1];
   
+  //checkSetServos();
   setServosTilt(deviation[0], deviation[1]);
+  
   checkSetZeroPoint();
+
+  //might need to disable interrupts while taking values from queue to
+  //write.  This is to avoid the queue getting messed up due to the 
+  //ISR putting onto the queue at the same time the main loop is pullling
+  //stuff off
   checkWriteSD();
-  delay(5);//without this delay the servos jitter.  I'm guessing that without this delay, the servo values being changed
-            // too often and it is messing up the PWM in the middle of the cycle.  I also tried a interrup driven "wait to update"
-            // but that also caused shaking and also the update time was terrible.  Like 500 ms instead of 5ms.  Not sure if the
-            //timer interrupt is being handled as often as we think due to the other interrupts on the system.  This would be
-            //something to look into.
+
+  //the following is test code and should be removed
+  if(SDLog.isEmpty())
+  {
+    digitalWrite(13, HIGH);
+  }
+  else
+  {
+    digitalWrite(13,LOW);
+  }
 }
 
 void setupServos()
@@ -172,10 +194,30 @@ void checkWriteSD()
     sd_line newLine = SDLog.dequeue(ok);
     if(ok)
     {
-      digitalWrite(13, !digitalRead(13));
+      //digitalWrite(13, !digitalRead(13));
     }
   }
 }
+
+//void checkTimeToFlagServos()
+//{
+//  setServosCount++;
+//  if(setServosCount == MS_UPDATE_SERVO_RATE)
+//  {
+//    setServosCount = 0;
+//    setServosFlag = true;
+//  }
+//}
+//
+//void checkSetServos()
+//{
+//  if(setServosFlag == true)
+//  {   
+//    setServosTilt(deviation[0], deviation[1]);
+//    setServosFlag = false;
+//  }
+//}
+
 
 //Timer2 Overflow Interrupt Vector, called every 1ms
 ISR(TIMER2_OVF_vect)        // interrupt service routine 
@@ -185,6 +227,9 @@ ISR(TIMER2_OVF_vect)        // interrupt service routine
   //we want to do a couple things with the interrupt
   //2. every 10 interrupts, log the deviation values to a queue that will be then sent to the sd card whenever possible
   //3. check if the magnet is no longer present after a debounce, similar to checkButton().  If not, trigger shutdown flag.
+
+  
+  //checkTimeToFlagServos();
   checkTimeToQueue();
   checkButton();
     
