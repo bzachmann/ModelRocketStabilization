@@ -12,6 +12,7 @@
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
 #include "BetterServo.h"
+#include "SDQueue.h"
 
 ///////////////defines/////////////////////
 #define PIN_SERVO_0       5
@@ -34,9 +35,12 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55);
 BetterServo servo[4];
 sensors_event_t event;
 double zeroPoint[2] = {0.0, 0.0};
-double deviation[2] = {0.0, 0.0};
+volatile double deviation[2] = {0.0, 0.0};
 volatile uint32_t buttonCount = 0;
 volatile bool setZeroPointFlag = false;
+
+volatile SDQueue SDLog = SDQueue();
+volatile uint8_t timeToQueueCounter = 0;
 
 ///////////////prototypes//////////////////
 void setupServos();
@@ -45,10 +49,13 @@ void setZeroPoint();
 void setupTimer2();
 void checkButton();
 void checkSetZeroPoint();
+void checkWriteSD();
 
 
 //////////////program///////////////////
 void setup() {
+  //TODO REMOVE THIS LINE WHEN SETTING UP SD CARD
+  pinMode(13, OUTPUT);
   
   setupTimer2();
   setupServos();
@@ -69,6 +76,7 @@ void loop()
   
   setServosTilt(deviation[0], deviation[1]);
   checkSetZeroPoint();
+  checkWriteSD();
   delay(5);//without this delay the servos jitter.  I'm guessing that without this delay, the servo values being changed
             // too often and it is messing up the PWM in the middle of the cycle.  I also tried a interrup driven "wait to update"
             // but that also caused shaking and also the update time was terrible.  Like 500 ms instead of 5ms.  Not sure if the
@@ -145,6 +153,30 @@ void checkSetZeroPoint()
   }
 }
 
+void checkTimeToQueue()
+{
+  timeToQueueCounter++;
+  if(timeToQueueCounter == 10)
+  {
+    timeToQueueCounter = 0;
+    sd_line newLine = {0.0 , deviation[0], deviation [1]};
+    SDLog.enqueue(newLine);
+  }
+}
+
+void checkWriteSD()
+{
+  if(!SDLog.isEmpty())
+  {
+    bool ok;
+    sd_line newLine = SDLog.dequeue(ok);
+    if(ok)
+    {
+      digitalWrite(13, !digitalRead(13));
+    }
+  }
+}
+
 //Timer2 Overflow Interrupt Vector, called every 1ms
 ISR(TIMER2_OVF_vect)        // interrupt service routine 
 { 
@@ -153,7 +185,7 @@ ISR(TIMER2_OVF_vect)        // interrupt service routine
   //we want to do a couple things with the interrupt
   //2. every 10 interrupts, log the deviation values to a queue that will be then sent to the sd card whenever possible
   //3. check if the magnet is no longer present after a debounce, similar to checkButton().  If not, trigger shutdown flag.
-  
+  checkTimeToQueue();
   checkButton();
     
   TIFR2 = 0x00;          //Timer2 INT Flag Reg: Clear Timer Overflow Flag
