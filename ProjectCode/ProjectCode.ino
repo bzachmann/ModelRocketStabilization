@@ -5,7 +5,7 @@
 #include <utility/imumaths.h>
 #include "BetterServo.h"
 
-//test servo addition offset 
+///////////////defines/////////////////////
 #define PIN_SERVO_0       5
 #define PIN_SERVO_1       6
 #define PIN_SERVO_2       9
@@ -18,14 +18,26 @@
 #define OFFSET_SERVO_2    6.5
 #define OFFSET_SERVO_3    4.5
 
+#define MIN_FIN_LIMIT     -50
+#define MAX_FIN_LIMIT      50
+
+///////////////variables///////////////////
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
+BetterServo servo[4];
+double zeroPoint[2] = {0.0, 0.0};
 
-BetterServo servo = BetterServo();
+uint32_t buttonCount = 0;
 
-double val = 0;
+///////////////prototypes//////////////////
+void setupServos();
+void setServosTilt(double y, double z);
+void setZeroPoint();
 
+
+//////////////program///////////////////
 void setup() {
-  servo.attach(PIN_SERVO_1, -50.0, 50.0, OFFSET_ALL + OFFSET_SERVO_1);
+  
+  setupServos();
 
   if(!bno.begin())
   {
@@ -36,21 +48,67 @@ void setup() {
   bno.setExtCrystalUse(true);
 }
 
-void loop() {
-
-  servo.write(val);
-
+void loop()
+{
   if(digitalRead(PIN_BUTTON))
   {
-    delay(100);
-    val -= 0.5;
-    while(digitalRead(PIN_BUTTON)){}
+    buttonCount++;
+    if(buttonCount = 300); //3 sec b/c of 10ms delay at end of loop.. change this when timer interrupt implemented
+    {
+      setZeroPoint();
+    }
+  }
+  else
+  {
+    buttonCount = 0;
   }
 
-  
-//  sensors_event_t event; 
-//  bno.getEvent(&event);
-//  servo.write(event.orientation.z);
-//  delay(10);
+//  servo.write(val);
+//
+//  if(digitalRead(PIN_BUTTON))
+//  {
+//    delay(100);
+//    val -= 0.5;
+//    while(digitalRead(PIN_BUTTON)){}
+//  }
+
+  sensors_event_t event; 
+  bno.getEvent(&event);
+  setServosTilt(event.orientation.y, event.orientation.z);
+  delay(10);
 
 }
+
+void setupServos()
+{
+  servo[0] = BetterServo();
+  servo[1] = BetterServo();
+  servo[2] = BetterServo();
+  servo[3] = BetterServo();
+   
+  servo[0].attach(PIN_SERVO_0, MIN_FIN_LIMIT, MAX_FIN_LIMIT, OFFSET_ALL + OFFSET_SERVO_0);
+  servo[1].attach(PIN_SERVO_1, MIN_FIN_LIMIT, MAX_FIN_LIMIT, OFFSET_ALL + OFFSET_SERVO_1);
+  servo[2].attach(PIN_SERVO_2, MIN_FIN_LIMIT, MAX_FIN_LIMIT, OFFSET_ALL + OFFSET_SERVO_2);
+  servo[3].attach(PIN_SERVO_3, MIN_FIN_LIMIT, MAX_FIN_LIMIT, OFFSET_ALL + OFFSET_SERVO_3);
+
+  for(int i = 0; i < 4; i++)
+  {
+    servo[i].write(0.0);
+  }
+}
+
+void setServosTilt(double y, double z)
+{
+  servo[1].write(y);
+  servo[3].write(-y);
+  
+  servo[0].write(z);
+  servo[2].write(-z);
+}
+
+void setZeroPoint()
+{
+  return;
+}
+
+
