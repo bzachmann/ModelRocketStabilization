@@ -47,15 +47,16 @@ volatile uint32_t buttonCount = 0;
 volatile bool setZeroPointFlag = false;
 volatile uint32_t hallCount = 0;
 volatile bool shutdownFlag = false;
+volatile bool queueFullFlag = false;
 
 volatile SDQueue SDLog;
 volatile SDQueue busyQueue;
 volatile bool queueBusy = false;
 volatile uint8_t timeToQueueCounter = 0;
 
+File SDfile;
 char filename[15] = "DATA.TXT";
 int ChipSelect = PIN_CHIP_SELECT;
-char buff[36] = "helloWorld";
 
 ///////////////prototypes//////////////////
 void setupServos();
@@ -67,6 +68,8 @@ void checkHall();
 void checkSetZeroPoint();
 void checkWriteSD();
 void checkBusyQueue();
+bool writeToSD(char text[]);
+bool writeDataToSD(sd_line m_line);
 void checkDoShutdown();
 
 
@@ -78,30 +81,53 @@ void loop()
   Adafruit_BNO055 bno = Adafruit_BNO055(55);
   SDLog.init();
   busyQueue.init();
+
+  setupServos();
+
+  if(ENABLE_HALL_SHUTDOWN != 0)
+  {
+    for(int i = 0; i < 4; i++)
+    {
+      servo[i].write(20.0);
+    }
+    while(!digitalRead(PIN_BUTTON));
+    {
+      //do nothing and wait for button press
+    }
+    
+    for(int i = 0; i < 4; i++)
+    {
+      servo[i].write(0.0);
+    }
+  }
   
   if(!SD.begin(PIN_CHIP_SELECT)) //if the sd card is not inserted, the device will fault out here
   {
+    servo[0].write(20.0);
     while(1);
   }
   
   if(!bno.begin())
   {
+    servo[1].write(20.0);
     while(1);
   }
-
-  
-  
   delay(1000);
   bno.setExtCrystalUse(true);
 
-  setupTimer2();
-  setupServos();
-
-  File SDfile = SD.open(filename, FILE_WRITE);
+  if(SD.exists(filename))
+  {
+    SD.remove(filename);
+  }
+  
+  SDfile = SD.open(filename, FILE_WRITE);
   if(!SDfile)
   {
+    servo[2].write(20.0);
     while(1);
   }
+  
+  setupTimer2();
 
   while(1)
   {
@@ -118,6 +144,20 @@ void loop()
   
     checkSetZeroPoint();
     checkWriteSD();
+
+
+    //TODO - remove. This was in place to test if QUEUE FILLS UP
+    if(queueFullFlag)
+    {
+      for(int i = 0; i < 4; i++)
+      {
+        servo[i].write(20.0);
+      }
+      delay(500);
+      while(1);
+    }
+    ////////////////////////////////////////////////////////////
+    
   }
 }
 
@@ -193,7 +233,7 @@ void checkSetZeroPoint()
 void checkTimeToQueue()
 {
   timeToQueueCounter++;
-  if(timeToQueueCounter == 10)
+  if(timeToQueueCounter == 50) //every 50 ms = 20 times per second
   {
     timeToQueueCounter = 0;
     sd_line newLine = {0.0 , deviation[0], deviation [1]};
@@ -201,22 +241,14 @@ void checkTimeToQueue()
     {
       if(!busyQueue.enqueue(newLine))
       {
-        //TODO - remove. This was in place to test if QUEUE FILLS UP
-        for(int i = 0; i < 4; i++)
-        {
-          servo[i].write(20.0);
-        }
+        queueFullFlag = true;
       } 
     }
     else
     {
       if(!SDLog.enqueue(newLine))
       {
-        //TODO - remove. This was in place to test if QUEUE FILLS UP
-        for(int i = 0; i < 4; i++)
-        {
-          servo[i].write(20.0);
-        }
+        queueFullFlag = true;
       }
     }
   }
@@ -233,6 +265,7 @@ void checkWriteSD()
     if(ok)
     {
       //TODO write to SD Card here
+      writeDataToSD(newLine);
     }
   }
 }
@@ -246,10 +279,7 @@ void checkBusyQueue()
       bool ok;
       if(!SDLog.enqueue(busyQueue.dequeue(ok)))
       {
-        for(int i = 0; i < 4; i++)
-        {
-          servo[i].write(20.0);
-        }
+        queueFullFlag = true;
       }
     }
   }
@@ -275,6 +305,31 @@ void checkHall()
   }
 }
 
+bool writeToSD(char text[])
+{
+  if(SDfile)
+  {
+    SDfile.println(text);
+    SDfile.flush();
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+bool writeDataToSD(sd_line m_line)
+{
+  char dataline[40];
+  int xSpinInt = m_line.xSpin * 1000;
+  int yDevInt = m_line.yDev * 1000;
+  int zDevInt = m_line.zDev * 1000;
+    
+  sprintf(dataline, "%i, %i, %i", xSpinInt, yDevInt, zDevInt);
+  return writeToSD(dataline);
+}
+
 void checkDoShutdown()
 {
   if(shutdownFlag)
@@ -288,23 +343,23 @@ void checkDoShutdown()
       servo[i].write(0.0);
     }
 
-    //TODO write the rest of the contents in Queues to sd card
+    //write the rest of the contents in Queues to sd card
     bool ok;
     sd_line newLine;
     while(!SDLog.isEmpty())
     {
       newLine = SDLog.dequeue(ok);
-      //TODO write to SD
+      writeDataToSD(newLine);
     }
     while(!busyQueue.isEmpty())
     {
       newLine = busyQueue.dequeue(ok);
-      //TODO write to SD
+      writeDataToSD(newLine);
     }
-
-    //TODO close SD card file here
-
-    delay(1000);//wait till servos are straight and then shutdown
+    //close SD card
+    SDfile.close();
+    
+    delay(500);//wait till servos are straight and then shutdown
     for(int i = 0; i < 4; i++)
     {
       servo[i].detach();
