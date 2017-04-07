@@ -7,8 +7,16 @@ SDQueue::SDQueue()
  *
  *******************************************************************************************/
 {
-	iFront = 0;
-	iBack = -1;
+  //moved to .begin()
+	//iFront = 0;
+	//iBack = -1;
+}
+
+
+void SDQueue::init()
+{
+  iFront = 0;
+  iBack = -1;
 }
 
 bool SDQueue::enqueue(sd_line data)

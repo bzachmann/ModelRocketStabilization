@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define QUEUELENGTH 100
+#define QUEUELENGTH 10
 
 typedef struct triple_double{
   double xSpin;
@@ -14,7 +14,8 @@ typedef struct triple_double{
 class SDQueue {
 public:
 	SDQueue();
-
+  
+  void init();
 	bool enqueue(sd_line data);
 	sd_line dequeue(bool &ok);
 

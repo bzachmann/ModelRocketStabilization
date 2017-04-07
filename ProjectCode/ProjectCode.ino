@@ -11,6 +11,9 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
+#include <SD.h>
+#include <SPI.h>
+
 #include "BetterServo.h"
 #include "SDQueue.h"
 
@@ -21,6 +24,7 @@
 #define PIN_SERVO_3       3
 #define PIN_BUTTON        4
 #define PIN_HALL          8
+#define PIN_CHIP_SELECT   10
 
 #define OFFSET_ALL        -90
 #define OFFSET_SERVO_0     16
@@ -34,7 +38,7 @@
 #define ENABLE_HALL_SHUTDOWN    0
 
 ///////////////variables///////////////////
-Adafruit_BNO055 bno = Adafruit_BNO055(55);
+
 BetterServo servo[4];
 sensors_event_t event;
 double zeroPoint[2] = {0.0, 0.0};
@@ -44,10 +48,14 @@ volatile bool setZeroPointFlag = false;
 volatile uint32_t hallCount = 0;
 volatile bool shutdownFlag = false;
 
-volatile SDQueue SDLog = SDQueue();
-volatile SDQueue busyQueue = SDQueue();
+volatile SDQueue SDLog;
+volatile SDQueue busyQueue;
 volatile bool queueBusy = false;
 volatile uint8_t timeToQueueCounter = 0;
+
+char filename[15] = "DATA.TXT";
+int ChipSelect = PIN_CHIP_SELECT;
+char buff[36] = "helloWorld";
 
 ///////////////prototypes//////////////////
 void setupServos();
@@ -62,39 +70,55 @@ void checkBusyQueue();
 void checkDoShutdown();
 
 
+
 //////////////program///////////////////
-void setup() {
-  //TODO REMOVE THIS LINE WHEN SETTING UP SD CARD
-  pinMode(13, OUTPUT);
+void setup() {}
+void loop()
+{
+  Adafruit_BNO055 bno = Adafruit_BNO055(55);
+  SDLog.init();
+  busyQueue.init();
+  
+  if(!SD.begin(PIN_CHIP_SELECT)) //if the sd card is not inserted, the device will fault out here
+  {
+    while(1);
+  }
   
   if(!bno.begin())
   {
     while(1);
   }
+
+  
+  
   delay(1000);
   bno.setExtCrystalUse(true);
 
   setupTimer2();
   setupServos();
 
-  digitalWrite(13,LOW);
-}
+  File SDfile = SD.open(filename, FILE_WRITE);
+  if(!SDfile)
+  {
+    while(1);
+  }
 
-void loop()
-{
-  checkDoShutdown();
+  while(1)
+  {
+    checkDoShutdown();
   
-  bno.getEvent(&event);// this causes servo jitter...might be caused by noise induced in pmw line when i2c bus active
+    bno.getEvent(&event);// this causes servo jitter...might be caused by noise induced in pmw line when i2c bus active
                          //this could be fixed by a filter on the hardware line.  as a software fix we 
                          // just might need to limit how often we use the i2c line
                          
-  deviation[0] = event.orientation.y - zeroPoint[0];
-  deviation[1] = event.orientation.z - zeroPoint[1];
+    deviation[0] = event.orientation.y - zeroPoint[0];
+    deviation[1] = event.orientation.z - zeroPoint[1];
   
-  setServosTilt(deviation[0], deviation[1]);
+    setServosTilt(deviation[0], deviation[1]);
   
-  checkSetZeroPoint();
-  checkWriteSD();
+    checkSetZeroPoint();
+    checkWriteSD();
+  }
 }
 
 void setupServos()
@@ -178,7 +202,10 @@ void checkTimeToQueue()
       if(!busyQueue.enqueue(newLine))
       {
         //TODO - remove. This was in place to test if QUEUE FILLS UP
-        digitalWrite(13, HIGH);
+        for(int i = 0; i < 4; i++)
+        {
+          servo[i].write(20.0);
+        }
       } 
     }
     else
@@ -186,7 +213,10 @@ void checkTimeToQueue()
       if(!SDLog.enqueue(newLine))
       {
         //TODO - remove. This was in place to test if QUEUE FILLS UP
-        digitalWrite(13, HIGH);
+        for(int i = 0; i < 4; i++)
+        {
+          servo[i].write(20.0);
+        }
       }
     }
   }
@@ -216,8 +246,10 @@ void checkBusyQueue()
       bool ok;
       if(!SDLog.enqueue(busyQueue.dequeue(ok)))
       {
-        //TODO - remove. This was in place to test if QUEUE FILLS UP
-        digitalWrite(13, HIGH);
+        for(int i = 0; i < 4; i++)
+        {
+          servo[i].write(20.0);
+        }
       }
     }
   }
