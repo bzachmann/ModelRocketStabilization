@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define QUEUELENGTH 10
+#define QUEUELENGTH 100
 
 typedef struct triple_double{
   double xSpin;

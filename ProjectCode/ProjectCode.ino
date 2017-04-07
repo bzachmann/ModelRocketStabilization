@@ -1,7 +1,6 @@
 /*
  * TODO:
  * 
- * 1. check hall effect sensor, and if not present trigger shutdown
  * 2. figure out way to cancel rocket spin using angular velocity about the x axis
  * 3. figure out shaking issue that is caused by imu i2c line inducing noise on PWM signals
  * 4. add sd card writing into code
@@ -21,6 +20,7 @@
 #define PIN_SERVO_2       9
 #define PIN_SERVO_3       3
 #define PIN_BUTTON        4
+#define PIN_HALL          8
 
 #define OFFSET_ALL        -90
 #define OFFSET_SERVO_0     16
@@ -31,8 +31,7 @@
 #define MIN_FIN_LIMIT     -50
 #define MAX_FIN_LIMIT      50
 
-#define MS_UPDATE_SERVO_RATE  1 //bringing this value close to 1 might cause PWM signal problems
-                                //this refresh rate need not be any faster than the polling of imu data
+#define ENABLE_HALL_SHUTDOWN    0
 
 ///////////////variables///////////////////
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
@@ -42,10 +41,12 @@ double zeroPoint[2] = {0.0, 0.0};
 volatile double deviation[2] = {0.0, 0.0};
 volatile uint32_t buttonCount = 0;
 volatile bool setZeroPointFlag = false;
-//volatile uint8_t setServosCount = 0;
-//volatile bool setServosFlag = false;
+volatile uint32_t hallCount = 0;
+volatile bool shutdownFlag = false;
 
 volatile SDQueue SDLog = SDQueue();
+volatile SDQueue busyQueue = SDQueue();
+volatile bool queueBusy = false;
 volatile uint8_t timeToQueueCounter = 0;
 
 ///////////////prototypes//////////////////
@@ -54,10 +55,11 @@ void setServosTilt(double y, double z);
 void setZeroPoint();
 void setupTimer2();
 void checkButton();
+void checkHall();
 void checkSetZeroPoint();
 void checkWriteSD();
-//void checkTimeToFlagServos();
-//void checkSetServos();
+void checkBusyQueue();
+void checkDoShutdown();
 
 
 //////////////program///////////////////
@@ -74,36 +76,25 @@ void setup() {
 
   setupTimer2();
   setupServos();
+
+  digitalWrite(13,LOW);
 }
 
 void loop()
 {
+  checkDoShutdown();
+  
   bno.getEvent(&event);// this causes servo jitter...might be caused by noise induced in pmw line when i2c bus active
                          //this could be fixed by a filter on the hardware line.  as a software fix we 
                          // just might need to limit how often we use the i2c line
+                         
   deviation[0] = event.orientation.y - zeroPoint[0];
   deviation[1] = event.orientation.z - zeroPoint[1];
   
-  //checkSetServos();
   setServosTilt(deviation[0], deviation[1]);
   
   checkSetZeroPoint();
-
-  //might need to disable interrupts while taking values from queue to
-  //write.  This is to avoid the queue getting messed up due to the 
-  //ISR putting onto the queue at the same time the main loop is pullling
-  //stuff off
   checkWriteSD();
-
-  //the following is test code and should be removed
-  if(SDLog.isEmpty())
-  {
-    digitalWrite(13, HIGH);
-  }
-  else
-  {
-    digitalWrite(13,LOW);
-  }
 }
 
 void setupServos()
@@ -182,7 +173,22 @@ void checkTimeToQueue()
   {
     timeToQueueCounter = 0;
     sd_line newLine = {0.0 , deviation[0], deviation [1]};
-    SDLog.enqueue(newLine);
+    if(queueBusy)
+    {
+      if(!busyQueue.enqueue(newLine))
+      {
+        //TODO - remove. This was in place to test if QUEUE FILLS UP
+        digitalWrite(13, HIGH);
+      } 
+    }
+    else
+    {
+      if(!SDLog.enqueue(newLine))
+      {
+        //TODO - remove. This was in place to test if QUEUE FILLS UP
+        digitalWrite(13, HIGH);
+      }
+    }
   }
 }
 
@@ -191,45 +197,101 @@ void checkWriteSD()
   if(!SDLog.isEmpty())
   {
     bool ok;
+    queueBusy = true;
     sd_line newLine = SDLog.dequeue(ok);
+    queueBusy = false;
     if(ok)
     {
-      //digitalWrite(13, !digitalRead(13));
+      //TODO write to SD Card here
     }
   }
 }
 
-//void checkTimeToFlagServos()
-//{
-//  setServosCount++;
-//  if(setServosCount == MS_UPDATE_SERVO_RATE)
-//  {
-//    setServosCount = 0;
-//    setServosFlag = true;
-//  }
-//}
-//
-//void checkSetServos()
-//{
-//  if(setServosFlag == true)
-//  {   
-//    setServosTilt(deviation[0], deviation[1]);
-//    setServosFlag = false;
-//  }
-//}
+void checkBusyQueue()
+{
+  if(!queueBusy && !busyQueue.isEmpty())
+  {
+    while(!busyQueue.isEmpty())
+    {
+      bool ok;
+      if(!SDLog.enqueue(busyQueue.dequeue(ok)))
+      {
+        //TODO - remove. This was in place to test if QUEUE FILLS UP
+        digitalWrite(13, HIGH);
+      }
+    }
+  }
+}
 
+void checkHall()
+{
+  if(ENABLE_HALL_SHUTDOWN != 0)
+  {
+    if(digitalRead(PIN_HALL))
+    {
+      hallCount++;
+      if(hallCount == 500)
+      {
+        shutdownFlag = true;
+        hallCount = 0;
+      }
+    }
+    else
+    {
+      hallCount = 0;
+    }
+  }
+}
+
+void checkDoShutdown()
+{
+  if(shutdownFlag)
+  {
+    //Disable Interrupt
+    TIMSK2 = 0;
+    
+    //Detach all servos
+    for(int i = 0; i < 4; i++)
+    {
+      servo[i].write(0.0);
+    }
+
+    //TODO write the rest of the contents in Queues to sd card
+    bool ok;
+    sd_line newLine;
+    while(!SDLog.isEmpty())
+    {
+      newLine = SDLog.dequeue(ok);
+      //TODO write to SD
+    }
+    while(!busyQueue.isEmpty())
+    {
+      newLine = busyQueue.dequeue(ok);
+      //TODO write to SD
+    }
+
+    //TODO close SD card file here
+
+    delay(1000);//wait till servos are straight and then shutdown
+    for(int i = 0; i < 4; i++)
+    {
+      servo[i].detach();
+    }
+    
+    while(1)
+    {
+      //do nothing until reset;
+    }
+  }
+}
 
 //Timer2 Overflow Interrupt Vector, called every 1ms
 ISR(TIMER2_OVF_vect)        // interrupt service routine 
 { 
   TCNT2 = 130;           //Reset Timer to 130 out of 255
   
-  //we want to do a couple things with the interrupt
-  //2. every 10 interrupts, log the deviation values to a queue that will be then sent to the sd card whenever possible
-  //3. check if the magnet is no longer present after a debounce, similar to checkButton().  If not, trigger shutdown flag.
-
-  
-  //checkTimeToFlagServos();
+  checkHall();
+  checkBusyQueue();
   checkTimeToQueue();
   checkButton();
     
