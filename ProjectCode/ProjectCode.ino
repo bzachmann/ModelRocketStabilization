@@ -3,7 +3,6 @@
  * 
  * 2. figure out way to cancel rocket spin using angular velocity about the x axis
  * 3. figure out shaking issue that is caused by imu i2c line inducing noise on PWM signals
- * 4. add sd card writing into code
  */
 
 #include <Arduino.h>
@@ -32,10 +31,11 @@
 #define OFFSET_SERVO_2    6.5
 #define OFFSET_SERVO_3    4.5
 
-#define MIN_FIN_LIMIT     -50
-#define MAX_FIN_LIMIT      50
+#define MIN_FIN_LIMIT     -30
+#define MAX_FIN_LIMIT      30
 
-#define ENABLE_HALL_SHUTDOWN    0
+#define ENABLE_HALL_SHUTDOWN       1
+#define ENABLE_SERVO_CORRECTION    1
 
 ///////////////variables///////////////////
 
@@ -60,6 +60,7 @@ int ChipSelect = PIN_CHIP_SELECT;
 
 ///////////////prototypes//////////////////
 void setupServos();
+void setDeviation();
 void setServosTilt(double y, double z);
 void setZeroPoint();
 void setupTimer2();
@@ -137,8 +138,7 @@ void loop()
                          //this could be fixed by a filter on the hardware line.  as a software fix we 
                          // just might need to limit how often we use the i2c line
                          
-    deviation[0] = event.orientation.y - zeroPoint[0];
-    deviation[1] = event.orientation.z - zeroPoint[1];
+    setDeviation();
   
     setServosTilt(deviation[0], deviation[1]);
   
@@ -147,15 +147,15 @@ void loop()
 
 
     //TODO - remove. This was in place to test if QUEUE FILLS UP
-    if(queueFullFlag)
-    {
-      for(int i = 0; i < 4; i++)
-      {
-        servo[i].write(20.0);
-      }
-      delay(500);
-      while(1);
-    }
+//    if(queueFullFlag)
+//    {
+//      for(int i = 0; i < 4; i++)
+//      {
+//        servo[i].write(20.0);
+//      }
+//      delay(500);
+//      while(1);
+//    }
     ////////////////////////////////////////////////////////////
     
   }
@@ -176,6 +176,20 @@ void setupServos()
   for(int i = 0; i < 4; i++)
   {
     servo[i].write(0.0);
+  }
+}
+
+void setDeviation()
+{
+  if(ENABLE_SERVO_CORRECTION != 0)
+  {
+    deviation[0] = event.orientation.y - zeroPoint[0];
+    deviation[1] = event.orientation.z - zeroPoint[1];
+  }
+  else
+  {
+    deviation[0] = 0 - zeroPoint[0];
+    deviation[1] = 0 - zeroPoint[1];
   }
 }
 
